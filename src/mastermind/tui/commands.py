@@ -10,6 +10,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
+from mastermind.config.settings import ModelConfig
+
 
 class CommandContext(Protocol):
     """Side effects a command handler is allowed to perform.
@@ -18,7 +20,7 @@ class CommandContext(Protocol):
     with these three methods satisfies it automatically ("structural typing",
     same idea as Go interfaces). `MastermindApp` in app.py never says
     "I implement CommandContext" anywhere; it just happens to define
-    `write_line`/`clear_transcript`/`quit` with matching signatures, and
+    `write_line`/`clear_transcript`/`exit` with matching signatures, and
     pyright accepts passing `self` wherever a `CommandContext` is expected.
     The `demo()` below exploits the same thing with a plain `_FakeContext`
     class that has nothing to do with Textual at all.
@@ -29,7 +31,8 @@ class CommandContext(Protocol):
 
     def write_line(self, text: str) -> None: ...
     def clear_transcript(self) -> None: ...
-    def quit(self) -> None: ...
+    def exit(self) -> None: ...
+    def open_model_dialog(self, current: ModelConfig | None) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -65,9 +68,24 @@ def _clear(args: list[str], ctx: CommandContext) -> CommandResult:
     return CommandResult(True, "Transcript cleared.")
 
 
-def _quit(args: list[str], ctx: CommandContext) -> CommandResult:
-    ctx.quit()
-    return CommandResult(True, "Quitting.")
+def _model(args: list[str], ctx: CommandContext) -> CommandResult:
+    # This is the one real side effect in this module: it calls back into
+    # whatever `ctx` was passed (the live App in normal use, `_FakeContext`
+    # in the demo/tests) rather than touching a RichLog directly — this
+    # function has no idea Textual exists.
+    ctx.open_model_dialog(None)
+    return CommandResult(True, "Opening model selection dialog…")
+
+
+def _exit(args: list[str], ctx: CommandContext) -> CommandResult:
+    # No message: `ctx.exit()` starts tearing down the widget tree
+    # immediately, and the app is gone right after this returns — a
+    # transcript message here would never actually be seen, and (per
+    # app.py's on_input_submitted) attempting to display one after exit()
+    # has already started would try to mount a widget into a screen that's
+    # mid-teardown and raise.
+    ctx.exit()
+    return CommandResult(True, "")
 
 
 def _not_implemented(args: list[str], ctx: CommandContext) -> CommandResult:
@@ -85,9 +103,9 @@ def _not_implemented(args: list[str], ctx: CommandContext) -> CommandResult:
 COMMANDS: dict[str, CommandHandler] = {
     "help": _help,
     "clear": _clear,
-    "quit": _quit,
+    "exit": _exit,
     "new": _not_implemented,
-    "model": _not_implemented,
+    "model": _model,
     "provider": _not_implemented,
     "tools": _not_implemented,
     "skills": _not_implemented,
@@ -123,7 +141,8 @@ def demo() -> None:
         def __init__(self) -> None:
             self.lines: list[str] = []
             self.cleared = False
-            self.quit_called = False
+            self.exit_called = False
+            self.model_dialog_opened = False
 
         def write_line(self, text: str) -> None:
             self.lines.append(text)
@@ -131,8 +150,11 @@ def demo() -> None:
         def clear_transcript(self) -> None:
             self.cleared = True
 
-        def quit(self) -> None:
-            self.quit_called = True
+        def exit(self) -> None:
+            self.exit_called = True
+
+        def open_model_dialog(self, current: ModelConfig | None) -> None:
+            self.model_dialog_opened = True
 
     ctx = _FakeContext()
     help_result = run_command("/help", ctx)
@@ -144,7 +166,16 @@ def demo() -> None:
     assert run_command("/clear", ctx) == CommandResult(True, "Transcript cleared.")
     assert ctx.cleared is True
     assert run_command("/nope", ctx) == CommandResult(False, "Unknown command: /nope")
-    assert run_command("/model gpt-4", ctx).ok is False
+    # `_model` ignores its args and always opens the dialog (there's no
+    # provider/model validation to fail here yet) — asserting `.ok is True`
+    # and that the dialog actually opened, not `.ok is False`.
+    assert run_command("/model gpt-4", ctx).ok is True
+    assert ctx.model_dialog_opened is True
+    # No message: app.py skips write_line() for an empty message specifically
+    # so /exit doesn't try to display anything after ctx.exit() has already
+    # started tearing down the screen.
+    assert run_command("/exit", ctx) == CommandResult(True, "")
+    assert ctx.exit_called is True
     print("commands.py demo OK")
 
 
