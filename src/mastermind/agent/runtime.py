@@ -52,11 +52,11 @@ class AgentRuntime:
                 # chat models (all we support so far) only ever produce str.
                 if (
                     isinstance(message_chunk, AIMessageChunk)
-                    and isinstance(message_chunk.content, str)
-                    and message_chunk.content
+                    and isinstance(message_chunk.text, str)
+                    and message_chunk.text
                 ):
-                    buffer += message_chunk.content
-                    yield AssistantToken(message_chunk.content)
+                    buffer += message_chunk.text
+                    yield AssistantToken(message_chunk.text)
         except Exception as exc:  # noqa: BLE001 -- any provider/network error must surface to the TUI, not crash it
             yield AgentError(str(exc))
             return
