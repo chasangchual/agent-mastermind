@@ -4,14 +4,7 @@ pre-Config config.json (bare ModelConfig fields, no "model_config" key).
 
 import json
 
-import pytest
-
 from mastermind.config.settings import Config, ModelConfig, load_config, save_config
-
-
-@pytest.fixture(autouse=True)
-def _isolated_config_path(tmp_path, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("MASTERMIND_CONFIG_PATH", str(tmp_path / "config.json"))
 
 
 def test_load_config_defaults_on_fresh_install() -> None:
