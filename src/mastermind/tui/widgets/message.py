@@ -20,10 +20,8 @@ _ROLES: dict[str, tuple[str, str]] = {
 
 
 class ChatMessage(Vertical):
-    """A `Vertical` (not a plain compose() of two top-level widgets) so one
-    `ChatMessage` mounts as a single unit per turn — `Conversation` below
-    mounts/queries one of these per message rather than juggling loose
-    label/body widget pairs itself.
+    """A `Vertical` so label+body mount as one unit per turn, letting
+    `Conversation` mount/query a single widget per message.
     """
 
     DEFAULT_CSS = """
@@ -40,15 +38,11 @@ class ChatMessage(Vertical):
 
     def compose(self) -> ComposeResult:
         label, color = _ROLES.get(self._role, (self._role.title(), "$text"))
-        # Static's Rich markup (`[b color]...[/b color]`) is unrelated to the
-        # Markdown body below it — this is just a bold, colored role label.
         yield Static(f"[b {color}]{label}[/b {color}]")
-        # `Markdown` (not `Static`/`RichLog`) is what gives the TUI Design
-        # requirement of rendered code blocks/lists/etc. in message bodies —
-        # RichLog and Static only understand Rich markup, not CommonMark.
+        # Markdown (not Static/RichLog) renders CommonMark — code blocks,
+        # lists, etc. — in the message body.
         yield Markdown(self._initial_text)
 
     async def update_text(self, text: str) -> None:
-        # Markdown.update() re-renders the whole body from `text` each call —
-        # fine at chat-message length/frequency, nothing to optimize here.
+        # Re-renders the whole body each call; fine at chat-message frequency.
         await self.query_one(Markdown).update(text)

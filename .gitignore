@@ -206,6 +206,9 @@ tempCodeRunnerFile.py
 # Ruff stuff:
 .ruff_cache/
 
+# LangGraph debug output (agent/graph.py draw_mermaid_png, config.draw_mermaid)
+graph.png
+
 # PyPI configuration file
 .pypirc
 

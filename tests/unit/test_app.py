@@ -1,7 +1,7 @@
 import pytest
 
 from mastermind.app import MastermindApp
-from mastermind.config.settings import ModelConfig
+from mastermind.config.settings import Config, ModelConfig
 
 
 # Textual apps normally take over the whole terminal, which a test can't do.
@@ -33,7 +33,7 @@ async def test_bracketed_dynamic_text_does_not_crash_markup_rendering() -> None:
     async with app.run_test() as pilot:
         # An init failure whose exception message contains brackets.
         bad_cfg = ModelConfig(provider="gemini", model="gemini-2.5-flash", api_key=None)
-        app._build_runtime(bad_cfg)
+        app._build_runtime(Config(model_config=bad_cfg))
 
         # A slash command containing brackets.
         await pilot.click("Input")

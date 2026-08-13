@@ -19,7 +19,7 @@ from mastermind.agent.events import (
     AssistantToken,
 )
 from mastermind.agent.graph import build_graph
-from mastermind.config.settings import ModelConfig
+from mastermind.config.settings import Config
 from mastermind.llm import build_chat_model
 from mastermind.observability.tracing import get_callbacks
 
@@ -30,9 +30,10 @@ class AgentRuntime:
     # /sessions (deferred, see CLAUDE.md's "don't jump ahead" list) exists.
     _THREAD_ID = "default"
 
-    def __init__(self, model_config: ModelConfig) -> None:
-        llm = build_chat_model(model_config)
-        self._graph = build_graph(llm)
+    def __init__(self, config: Config) -> None:
+        assert config.model_config is not None
+        llm = build_chat_model(config.model_config)
+        self._graph = build_graph(llm, draw_mermaid=config.draw_mermaid)
 
     async def astream(self, user_text: str) -> AsyncIterator[AgentEvent]:
         """Run one turn, yielding AgentEvents as the reply streams in."""

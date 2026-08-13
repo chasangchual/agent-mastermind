@@ -14,26 +14,37 @@ to change — same idea CLAUDE.md's Architecture Layering describes.
 """
 
 from __future__ import annotations
+from typing import Annotated, TypedDict
 
+from langchain.messages import AnyMessage
+from langchain_protocol import Annotated
 from langchain_core.language_models import BaseChatModel
 from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.graph import END, START, MessagesState, StateGraph
+from langgraph.graph import END, START, MessagesState, StateGraph, add_messages
 from langgraph.graph.state import CompiledStateGraph
 
-
-def build_graph(llm: BaseChatModel) -> CompiledStateGraph:
-    async def call_model(state: MessagesState) -> dict:
+class State(TypedDict):
+    messages : Annotated[list[AnyMessage], add_messages]
+    
+    
+def build_graph(llm: BaseChatModel, *, draw_mermaid: bool = False) -> CompiledStateGraph:
+    async def call_model(state: State) -> dict:
         # `llm.astream` (not `.ainvoke`) is what makes token-by-token chunks
         # observable outside this node: LangGraph's `stream_mode="messages"`
         # (see agent/runtime.py) surfaces each chunk as it's produced here,
         # not just the node's final return value.
-        full = None
+        message = None
         async for chunk in llm.astream(state["messages"]):
-            full = chunk if full is None else full + chunk
-        return {"messages": [full]}
+            message = chunk if message is None else message + chunk
+        return {"messages": [message]}
 
-    builder = StateGraph(MessagesState)
-    builder.add_node("agent", call_model)
-    builder.add_edge(START, "agent")
-    builder.add_edge("agent", END)
-    return builder.compile(checkpointer=InMemorySaver())
+    builder = StateGraph(State)
+    builder.add_node("chat", call_model)
+    builder.add_edge(START, "chat")
+    builder.add_edge("chat", END)
+    
+    _graph = builder.compile(checkpointer=InMemorySaver())
+    if draw_mermaid:  # config.draw_mermaid — debug aid, off by default
+        _graph.get_graph().draw_mermaid_png(output_file_path="graph.png")
+
+    return _graph

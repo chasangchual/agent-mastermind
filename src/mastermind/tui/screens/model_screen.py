@@ -30,21 +30,18 @@ def _model_options(provider: str) -> list[tuple[str, str]]:
 
 
 class ModelScreen(ModalScreen[ModelConfig | None]):
-    """A `ModalScreen` is a Textual `Screen` that overlays the current one
-    instead of replacing it — the main screen (transcript + input) stays
-    mounted underneath, dimmed, until this one is popped.
+    """A `ModalScreen` overlays the current screen instead of replacing it —
+    the main screen stays mounted underneath until this one is popped.
 
-    `ModalScreen[ModelConfig | None]` is Textual's typed way of declaring
-    "closing this screen hands back a ModelConfig or None". That value is
-    whatever gets passed to `self.dismiss(...)` below, and it's delivered
-    to whoever did `push_screen(ModelScreen(...), callback=...)` — that's
-    `MastermindApp._on_model_configured` in app.py.
+    `ModalScreen[ModelConfig | None]` declares that dismissing this screen
+    hands back a `ModelConfig | None`, delivered via `self.dismiss(...)`
+    below to `MastermindApp._on_model_configured` (app.py), which pushed it
+    with `push_screen(ModelScreen(...), callback=...)`.
     """
 
-    # Scoped to this screen only (Textual CSS cascades per-screen, not
-    # globally). `align: center middle` centers the dialog box in the
-    # terminal; `#dialog` gets a fixed width + border so it reads as a
-    # floating dialog rather than filling the screen.
+    # CSS here is scoped to this screen only. `align: center middle` centers
+    # the dialog; `#dialog` gets a fixed width + border to read as a floating
+    # box rather than filling the screen.
     CSS = """
     ModelScreen {
         align: center middle;
@@ -79,17 +76,13 @@ class ModelScreen(ModalScreen[ModelConfig | None]):
         self._current = current
 
     def compose(self) -> ComposeResult:
-        # compose() runs once, right after this screen is pushed, and
-        # builds its widget tree the same way MastermindApp.compose() does
-        # for the main screen — see app.py for the general explanation of
-        # why this is a generator and why layout needs no separate call.
         provider = self._current.provider if self._current else SUPPORTED_PROVIDERS[0]
         model = self._current.model if self._current else PROVIDER_MODELS[provider][0]
         is_known_model = model in PROVIDER_MODELS[provider]
 
-        # `yield` inside a `with` block nests widgets under that container —
-        # Vertical/Horizontal have no explicit "add child" call, membership
-        # is just whatever gets yielded while their `with` block is open.
+        # yield inside a `with` block nests that widget under the container —
+        # Vertical/Horizontal membership is just whatever's yielded while
+        # their `with` block is open.
         with Vertical(id="dialog"):
             yield Label("Provider")
             yield Select(
@@ -128,10 +121,7 @@ class ModelScreen(ModalScreen[ModelConfig | None]):
                 yield Button("Save", variant="primary", id="save")
 
     def on_mount(self) -> None:
-        # on_mount fires once these widgets are actually attached — the
-        # earliest point it's safe to query/hide them (compose() is still
-        # busy yielding while it runs). Sets visibility to match whichever
-        # provider ended up preselected above.
+        # Set visibility to match whichever provider ended up preselected.
         self._sync_field_visibility(self._provider_select.value)
         self._sync_custom_model_visibility(self._model_select.value)
 
@@ -145,9 +135,8 @@ class ModelScreen(ModalScreen[ModelConfig | None]):
 
     def _sync_field_visibility(self, provider: object) -> None:
         assert isinstance(provider, str)
-        # `.display` controls whether Textual renders/lays out a widget at
-        # all (a hidden widget takes no space, unlike CSS visibility) —
-        # this is how the dialog shows only the field the provider needs.
+        # `.display = False` skips layout entirely (unlike CSS visibility),
+        # so hidden fields take no space.
         self.query_one("#base_url", Input).display = needs_base_url(provider)
         self.query_one("#api_key", Input).display = needs_api_key(provider)
 
@@ -155,20 +144,15 @@ class ModelScreen(ModalScreen[ModelConfig | None]):
         self.query_one("#custom_model", Input).display = model == _CUSTOM
 
     def on_select_changed(self, event: Select.Changed) -> None:
-        # Textual routes every Select's change through this one handler —
-        # the `on_<widget>_<event>` naming convention only distinguishes
-        # widget *type* + event, not which instance fired it. `event.select`
-        # is that instance, so `.id` is how the two Selects are told apart
-        # (same pattern as `event.input` on Input.Submitted in app.py).
+        # Both Selects route through this one handler (on_<widget>_<event>
+        # only distinguishes type+event, not instance) — event.select.id
+        # tells them apart.
         if event.select.id == "provider":
             provider = event.value
             assert isinstance(provider, str)
-            # set_options() replaces the model list for the new provider;
-            # Textual resets the selection when options change, so the
-            # value is set explicitly right after — that assignment itself
-            # posts another Select.Changed, which is what updates the
-            # custom-model field's visibility below without duplicating
-            # that logic here.
+            # set_options() resets the selection, so it's set explicitly
+            # right after — that assignment posts another Select.Changed,
+            # which updates the custom-model visibility below on its own.
             self._model_select.set_options(_model_options(provider))
             self._model_select.value = PROVIDER_MODELS[provider][0]
             self._sync_field_visibility(provider)

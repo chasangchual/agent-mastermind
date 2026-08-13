@@ -1,14 +1,14 @@
-"""Model/provider configuration: known providers/models and on-disk persistence.
+"""App configuration: known providers/models and on-disk persistence.
 
 Values come from what the user picks in the /model dialog (tui/screens/
 model_screen.py), not env vars — this module just holds the provider/model
-catalog and the load/save side of the picked ModelConfig.
+catalog and the load/save side of the persisted Config.
 """
 
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 from mastermind.config.paths import config_file_path
 
@@ -19,6 +19,13 @@ class ModelConfig:
     model: str
     api_key: str | None = None
     base_url: str | None = None
+
+
+@dataclass(frozen=True)
+class Config:
+    model_config: ModelConfig | None = None
+    draw_mermaid: bool = False
+    prompt_log: bool = False
 
 
 # Local/self-hosted providers need a base URL; hosted APIs need an API key.
@@ -58,17 +65,26 @@ def needs_api_key(provider: str) -> bool:
     return provider not in _URL_PROVIDERS
 
 
-def load_config() -> ModelConfig | None:
-    """The last config saved via /model, or None on a fresh install."""
+def load_config() -> Config:
+    """The persisted app config, or defaults on a fresh install."""
     path = config_file_path()
     if not path.exists():
-        return None
+        return Config()
 
-    return ModelConfig(**json.loads(path.read_text()))
+    data = json.loads(path.read_text())
+    if "model_config" not in data:  # pre-Config file: bare ModelConfig fields
+        return Config(model_config=ModelConfig(**data))
+
+    model_config = data["model_config"]
+    return Config(
+        model_config=ModelConfig(**model_config) if model_config else None,
+        draw_mermaid=data.get("draw_mermaid", False),
+        prompt_log=data.get("prompt_log", False),
+    )
 
 
-def save_config(config: ModelConfig) -> None:
-    """Persist `cfg` so it survives restarts.
+def save_config(config: Config) -> None:
+    """Persist `config` so it survives restarts.
 
     May contain an API key in plain text, so the file is written user-only
     (0600) — that keeps it out of other local accounts' reach, it is not
@@ -76,5 +92,5 @@ def save_config(config: ModelConfig) -> None:
     """
     path = config_file_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(config.__dict__, indent=2))
+    path.write_text(json.dumps(asdict(config), indent=2))
     path.chmod(0o600)

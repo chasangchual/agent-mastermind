@@ -16,17 +16,10 @@ from mastermind.config.settings import ModelConfig
 class CommandContext(Protocol):
     """Side effects a command handler is allowed to perform.
 
-    This is a `typing.Protocol`, not an ABC you inherit from — any object
-    with these three methods satisfies it automatically ("structural typing",
-    same idea as Go interfaces). `MastermindApp` in app.py never says
-    "I implement CommandContext" anywhere; it just happens to define
-    `write_line`/`clear_transcript`/`exit` with matching signatures, and
-    pyright accepts passing `self` wherever a `CommandContext` is expected.
-    The `demo()` below exploits the same thing with a plain `_FakeContext`
-    class that has nothing to do with Textual at all.
-
-    The `...` bodies mean "no implementation here, this is only a shape
-    description" — Protocol methods are never actually called on this class.
+    A `typing.Protocol`: any object with these methods satisfies it
+    structurally, no inheritance needed. `MastermindApp` (app.py) matches it
+    just by defining methods with the same signatures; `demo()` below uses a
+    plain `_FakeContext` with no Textual involved at all.
     """
 
     def write_line(self, text: str) -> None: ...
@@ -60,30 +53,19 @@ def _help(args: list[str], ctx: CommandContext) -> CommandResult:
 
 
 def _clear(args: list[str], ctx: CommandContext) -> CommandResult:
-    # This is the one real side effect in this module: it calls back into
-    # whatever `ctx` was passed (the live App in normal use, `_FakeContext`
-    # in the demo/tests) rather than touching a RichLog directly — this
-    # function has no idea Textual exists.
     ctx.clear_transcript()
     return CommandResult(True, "Transcript cleared.")
 
 
 def _model(args: list[str], ctx: CommandContext) -> CommandResult:
-    # This is the one real side effect in this module: it calls back into
-    # whatever `ctx` was passed (the live App in normal use, `_FakeContext`
-    # in the demo/tests) rather than touching a RichLog directly — this
-    # function has no idea Textual exists.
     ctx.open_model_dialog(None)
     return CommandResult(True, "Opening model selection dialog…")
 
 
 def _exit(args: list[str], ctx: CommandContext) -> CommandResult:
-    # No message: `ctx.exit()` starts tearing down the widget tree
-    # immediately, and the app is gone right after this returns — a
-    # transcript message here would never actually be seen, and (per
-    # app.py's on_input_submitted) attempting to display one after exit()
-    # has already started would try to mount a widget into a screen that's
-    # mid-teardown and raise.
+    # No message: ctx.exit() tears down the app immediately, and (per
+    # app.py's on_input_submitted) writing to the transcript after exit()
+    # has started would try to mount into an already-closing screen.
     ctx.exit()
     return CommandResult(True, "")
 
@@ -134,9 +116,8 @@ def run_command(line: str, ctx: CommandContext) -> CommandResult:
 
 
 def demo() -> None:
-    # A minimal stand-in for CommandContext with no Textual/App involved at
-    # all — proof that command dispatch is testable without rendering the
-    # TUI, per the "testable without rendering the full TUI" requirement.
+    # A minimal stand-in for CommandContext, no Textual/App involved —
+    # proof that command dispatch is testable without rendering the TUI.
     class _FakeContext:
         def __init__(self) -> None:
             self.lines: list[str] = []
@@ -166,14 +147,8 @@ def demo() -> None:
     assert run_command("/clear", ctx) == CommandResult(True, "Transcript cleared.")
     assert ctx.cleared is True
     assert run_command("/nope", ctx) == CommandResult(False, "Unknown command: /nope")
-    # `_model` ignores its args and always opens the dialog (there's no
-    # provider/model validation to fail here yet) — asserting `.ok is True`
-    # and that the dialog actually opened, not `.ok is False`.
     assert run_command("/model gpt-4", ctx).ok is True
     assert ctx.model_dialog_opened is True
-    # No message: app.py skips write_line() for an empty message specifically
-    # so /exit doesn't try to display anything after ctx.exit() has already
-    # started tearing down the screen.
     assert run_command("/exit", ctx) == CommandResult(True, "")
     assert ctx.exit_called is True
     print("commands.py demo OK")
