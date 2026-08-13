@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 
-from langchain_core.messages import AIMessageChunk, HumanMessage
+from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 
 from mastermind.agent.events import (
     AgentError,
@@ -71,3 +71,8 @@ class AgentRuntime:
             yield AgentError(str(exc))
             return
         yield AssistantCompleted(buffer)
+
+    def _get_state(self) -> list[HumanMessage | AIMessage]:
+        """Return the current conversation history, for display in the TUI."""
+        snapshot = self._graph.get_state({"configurable": {"thread_id": self._THREAD_ID}})
+        return snapshot.values.get("messages", [])
