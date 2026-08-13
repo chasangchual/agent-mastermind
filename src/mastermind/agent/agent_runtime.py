@@ -45,6 +45,15 @@ class AgentRuntime:
                 config={
                     "configurable": {"thread_id": self._THREAD_ID},
                     "callbacks": get_callbacks(),
+                    # Langfuse tracing (see observability/tracing.py): one trace
+                    # per turn, grouped into one session per running thread —
+                    # https://langfuse.com/docs/observability/best-practices.
+                    # `run_name` becomes the trace name; verb-first per that
+                    # guide's naming convention, not the model name (that's
+                    # already a generation-level attribute) or a per-turn
+                    # value (names should stay stable across traces).
+                    "run_name": "generate-response",
+                    "metadata": {"langfuse_session_id": self._THREAD_ID},
                 },
                 stream_mode="messages",
             ):

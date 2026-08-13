@@ -11,6 +11,7 @@ from textual.widgets import Footer, Header, Input
 from mastermind.agent.agent_runtime import AgentRuntime
 from mastermind.agent.events import AgentError, AssistantCompleted, AssistantToken
 from mastermind.config.settings import Config, ModelConfig, load_config, save_config
+from mastermind.observability.tracing import shutdown as shutdown_tracing
 from mastermind.tui.commands import run_command
 from mastermind.tui.screens.model_screen import ModelScreen
 from mastermind.tui.widgets.conversation import Conversation
@@ -158,6 +159,9 @@ class MastermindApp(App):
         # Named `exit` to match CommandContext's method name, not Textual's
         # `action_exit`. This overrides App.exit() itself, so `super().exit()`
         # (not `self.exit()`) is what actually reaches Textual's shutdown.
+        # Flush before tearing down: Langfuse batches spans in the background,
+        # so quitting without this can drop whatever hasn't been sent yet.
+        shutdown_tracing()
         super().exit(*args, **kwargs)
 
     def on_input_submitted(self, event: Input.Submitted) -> None:

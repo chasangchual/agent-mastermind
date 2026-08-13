@@ -6,7 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Agent/LLM framework:** the agent loop is built on **LangGraph** (graph-based agent runtime) and the LLM/tool layer on **LangChain** (model integrations, tool binding), not fully custom code. Prefer LangChain/LangGraph primitives over hand-rolled equivalents in `agent/` and `llm/` — e.g. `langchain`'s chat model classes instead of a bespoke provider abstraction, LangGraph's graph/state/checkpoint APIs instead of a hand-rolled loop. Only write custom code where LangChain/LangGraph doesn't already cover the need (e.g. the TUI itself, session persistence).
 
-**Tracing/debug logging:** use **Langfuse** for LLM/agent-run tracing rather than custom tracing code. Unlike LangSmith, Langfuse isn't purely env-var auto-instrumentation: LangChain/LangGraph need Langfuse's `CallbackHandler` (from the `langfuse` package) passed in as a callback on graph/chain invocations. `observability/tracing.py` should own constructing that `CallbackHandler` (reading the `LANGFUSE_*` env vars below) and exposing it for `agent/graph.py` to pass through — keep it limited to that setup, not a custom tracer. `observability/logging.py` is still for ordinary application logs, which Langfuse doesn't cover.
+**Tracing/debug logging:** use **Langfuse** for LLM/agent-run tracing rather than custom tracing code. Unlike LangSmith, Langfuse isn't purely env-var auto-instrumentation: LangChain/LangGraph need Langfuse's `CallbackHandler` (from the `langfuse` package) passed in as a callback on graph/chain invocations. `observability/tracing.py` should own constructing that `CallbackHandler` (reading the `LANGFUSE_*` env vars below) and exposing it for `agent/agent_runtime.py` to pass through on its `.astream()` call — keep it limited to that setup, not a custom tracer. `observability/logging.py` is still for ordinary application logs, which Langfuse doesn't cover.
+
+Tracing conventions (per the [Langfuse skill](https://github.com/langfuse/skills)'s instrumentation guidance): one trace per chat turn, grouped into one session per running `AgentRuntime` thread (`langfuse_session_id` = the LangGraph `thread_id`); trace names are stable/verb-first (`generate-response`), never per-turn or model-specific — the model is already a `generation`-level attribute. `observability/tracing.py::shutdown()` flushes pending spans and must be called once before the process exits (Langfuse's v3+ client batches over OpenTelemetry, so an unflushed exit can drop the last turn) — `app.py`'s `exit()` override is the one place both quit paths (ctrl+q, `/exit`) funnel through, so that's where it's called.
 
 **Textual code comments:** the user is new to Textual. Trust contextual judgment on when a comment is warranted, based on what's already established elsewhere in the codebase — don't default to explaining every Textual concept in play (lifecycle hooks, `BINDINGS`→`action_*`, the `on_<widget>_<event>` dispatch convention, CSS units/theme variables, why blocking calls in event handlers are a problem) every time it recurs. A short note on a genuinely non-obvious mechanism earns its place; restating something a prior comment in the same file (or a nearby one) already covered does not.
 
@@ -280,7 +282,7 @@ LLAMA_CPP_BASE_URL
 
 LANGFUSE_SECRET_KEY
 LANGFUSE_PUBLIC_KEY
-LANGFUSE_HOST
+LANGFUSE_BASE_URL  # defaults to https://cloud.langfuse.com; LANGFUSE_HOST also works but is deprecated
 ```
 
 ## Exception Naming
