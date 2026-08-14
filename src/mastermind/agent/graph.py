@@ -20,22 +20,26 @@ from langchain.messages import AnyMessage
 from langchain_protocol import Annotated
 from langchain_core.language_models import BaseChatModel
 from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.graph import END, START, MessagesState, StateGraph, add_messages
+from langgraph.graph import END, START, StateGraph, add_messages
 from langgraph.graph.state import CompiledStateGraph
+from langchain_core.runnables import RunnableConfig
 
 class State(TypedDict):
     messages : Annotated[list[AnyMessage], add_messages]
     
     
 def build_graph(llm: BaseChatModel, *, draw_mermaid: bool = False) -> CompiledStateGraph:
-    async def call_model(state: State) -> dict:
-        # `llm.astream` (not `.ainvoke`) is what makes token-by-token chunks
-        # observable outside this node: LangGraph's `stream_mode="messages"`
-        # (see agent/runtime.py) surfaces each chunk as it's produced here,
-        # not just the node's final return value.
-        message = None
-        async for chunk in llm.astream(state["messages"]):
-            message = chunk if message is None else message + chunk
+    async def call_model(state: State, config: RunnableConfig) -> dict:
+        # `llm.ainvoke` (not `.astream`) is deliberate under `astream_events`
+        # `version="v3"` (see agent_runtime.py): `.astream()` is a legacy
+        # `BaseChatModel` code path that only ever fires the old
+        # `on_llm_new_token` callback and never touches the v2/v3
+        # content-block machinery — v3 protocol-event deltas are only
+        # emitted from inside `_agenerate_with_cache`/`.ainvoke()`, driven
+        # by a `_V2StreamingCallbackHandler` LangGraph attaches to `config`
+        # for a v3 run. `config` must be threaded through so that handler
+        # reaches the model call.
+        message = await llm.ainvoke(state["messages"], config)
         return {"messages": [message]}
 
     builder = StateGraph(State)
