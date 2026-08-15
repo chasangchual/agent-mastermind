@@ -26,6 +26,8 @@ class Config:
     model_config: ModelConfig | None = None
     draw_mermaid: bool = False
     prompt_log: bool = False
+    max_iterations: int | None = None  # None = no limit, else max iterations per turn
+    compact_max_token: int = 4096
 
 
 # Local/self-hosted providers need a base URL; hosted APIs need an API key.

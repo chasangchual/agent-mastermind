@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from itertools import count
 from typing import Protocol
 
 from mastermind.config.settings import ModelConfig
@@ -26,6 +27,7 @@ class CommandContext(Protocol):
     def clear_transcript(self) -> None: ...
     def exit(self) -> None: ...
     def open_model_dialog(self, current: ModelConfig | None) -> None: ...
+    def compact_history(self) -> int | None: ...
 
 
 @dataclass(frozen=True)
@@ -62,6 +64,15 @@ def _model(args: list[str], ctx: CommandContext) -> CommandResult:
     return CommandResult(True, "Opening model selection dialog…")
 
 
+def _compact(args: list[str], ctx: CommandContext) -> CommandResult:
+    droppedCount = ctx.compact_history()
+    if droppedCount is None:
+        return CommandResult(False, "No model configured. Run /model first.")
+    if droppedCount == 0:
+        return CommandResult(True, "Transcript already compact.")
+    return CommandResult(True, f"Compacted: {droppedCount} messages.")
+
+
 def _exit(args: list[str], ctx: CommandContext) -> CommandResult:
     # No message: ctx.exit() tears down the app immediately, and (per
     # app.py's on_input_submitted) writing to the transcript after exit()
@@ -88,6 +99,7 @@ COMMANDS: dict[str, CommandHandler] = {
     "exit": _exit,
     "new": _not_implemented,
     "model": _model,
+    "compact": _compact,
     "provider": _not_implemented,
     "tools": _not_implemented,
     "skills": _not_implemented,
@@ -124,6 +136,7 @@ def demo() -> None:
             self.cleared = False
             self.exit_called = False
             self.model_dialog_opened = False
+            self.compact_droppedCount = 3 
 
         def write_line(self, text: str) -> None:
             self.lines.append(text)
@@ -136,6 +149,9 @@ def demo() -> None:
 
         def open_model_dialog(self, current: ModelConfig | None) -> None:
             self.model_dialog_opened = True
+
+        def compact_history(self) -> int | None:
+            return self.compact_droppedCount
 
     ctx = _FakeContext()
     help_result = run_command("/help", ctx)

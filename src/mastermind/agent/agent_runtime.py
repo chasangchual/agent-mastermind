@@ -10,10 +10,15 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from logging import Logger
 
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import (
+    AIMessage,
+    HumanMessage,
+    RemoveMessage,
+    trim_messages,
+)
 from langchain_protocol import Any
 from langgraph.types import StateSnapshot
-
+from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from mastermind.agent.events import (
     AgentError,
     AgentEvent,
@@ -31,7 +36,7 @@ class AgentRuntime:
     """Runs the graph for one turn and relays it as `AgentEvent`s.
 
     `astream()` opens the graph run via `astream_events(version="v3")`, which multiplexes every event the run produces, not just chat tokens.
-    
+
     Two `method`s show up on the raw event log:
     - "values": a full `{"messages": [...]}` state snapshot after each step (start of turn, end of turn, ...). Powers the `.values`  projection, not `.messages`.
     - "messages": one event per step of a chat model's content-block lifecycle, `payload = (event_dict, metadata)`. For a single text response, `event_dict["event"]` is always this sequence:
@@ -57,9 +62,12 @@ class AgentRuntime:
 
     def __init__(self, config: Config, thread_id: str = _DEFAULT_THREAD_ID) -> None:
         assert config.model_config is not None
-        llm = build_chat_model(config.model_config)
-        self._graph = build_graph(llm, draw_mermaid=config.draw_mermaid)
+
+        self._llm = build_chat_model(config.model_config)
+        self._graph = build_graph(self._llm, draw_mermaid=config.draw_mermaid)
         self._thread_id = thread_id
+        self._compact_max_token = config.compact_max_token
+        self._max_iterations = config.max_iterations
 
     async def astream(self, user_text: str) -> AsyncIterator[AgentEvent]:
         """Run one turn, yielding AgentEvents as the reply streams in."""
@@ -87,11 +95,31 @@ class AgentRuntime:
                     async for text in stream.text:
                         buffer += text
                         yield AssistantToken(text)
-        except Exception as exc:  # noqa: BLE001 -- any provider/network error must surface to the TUI, not crash it
-            yield AgentError(repr(exc))
+        except (
+            Exception
+        ) as ex:  # noqa: BLE001 -- any provider/network error must surface to the TUI, not crash it
+            yield AgentError(repr(ex))
             return
 
         yield AssistantCompleted(buffer)
+
+    def compact_history(self) -> int:
+        thread = self._get_thread(self._thread_id)
+        messages = self._get_state_messages(self._thread_id)
+        trimmed = trim_messages(
+            messages,
+            max_tokens=self._compact_max_token,
+            token_counter=self._llm,
+            strategy="last",
+            start_on="human",
+        )
+        droppedCount = len(messages) - len(trimmed)
+        if droppedCount > 0:
+            self._graph.update_state(
+                {"configurable": thread},
+                {"messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES), *trimmed]},
+            )
+        return droppedCount
 
     def _get_state_message_for_default_thread(self) -> list[HumanMessage | AIMessage]:
         snapshot = self._get_state_snapshot_for_default_thread()

@@ -155,6 +155,11 @@ class MastermindApp(App):
     def clear_transcript(self) -> None:
         self.query_one(Conversation).clear()
 
+    def compact_history(self) -> int | None:
+        if self._runtime is None:
+            return None
+        return self._runtime.compact_history()
+
     def exit(self, *args: Any, **kwargs: Any) -> None:
         # Named `exit` to match CommandContext's method name, not Textual's
         # `action_exit`. This overrides App.exit() itself, so `super().exit()`
