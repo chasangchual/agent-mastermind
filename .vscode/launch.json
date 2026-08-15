@@ -1,0 +1,13 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python: Mastermind",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "mastermind",
+      "console": "integratedTerminal",
+      "python": "${workspaceFolder}/.venv/bin/python" 
+    }
+  ]
+}
