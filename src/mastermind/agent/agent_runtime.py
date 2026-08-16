@@ -121,6 +121,13 @@ class AgentRuntime:
             )
         return droppedCount
 
+    def clear_history(self) -> None:
+        thread = self._get_thread(self._thread_id)
+        self._graph.update_state(
+            {"configurable": thread},
+            {"messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES)]},
+        )
+
     def _get_state_message_for_default_thread(self) -> list[HumanMessage | AIMessage]:
         snapshot = self._get_state_snapshot_for_default_thread()
         return snapshot.values.get("messages", [])

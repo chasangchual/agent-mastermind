@@ -29,15 +29,15 @@ class MastermindApp(App):
     TITLE = "mastermind"
 
     # BINDINGS maps a key to an `action_<name>` method: ctrl+q -> action_quit
-    # (built into App), ctrl+l -> action_clear_transcript below. The third
+    # (built into App), ctrl+l -> action_clear_session below. The third
     # element is just the label Footer displays for it.
     BINDINGS: ClassVar = [
         ("ctrl+q", "quit", "Exit"),
-        ("ctrl+l", "clear_transcript", "Clear"),
+        ("ctrl+l", "clear_session", "Clear"),
     ]
 
-    def action_clear_transcript(self) -> None:
-        self.clear_transcript()
+    def action_clear_session(self) -> None:
+        self.clear_session()
 
     # Textual CSS: same selector/property idea as browser CSS, scaled to a
     # terminal grid. `1fr` gives Conversation the vertical space left over
@@ -108,7 +108,8 @@ class MastermindApp(App):
     def _build_runtime(self, cfg: Config) -> None:
         assert cfg.model_config is not None
         try:
-            self._runtime = AgentRuntime(cfg)
+            import uuid
+            self._runtime = AgentRuntime(cfg, str(uuid.uuid4()))
         except Exception as exc:  # noqa: BLE001 -- an unsupported/misconfigured provider must be reported, not crash startup
             self._runtime = None
             # `escape()` because `exc`'s message is untrusted (e.g. a
@@ -152,8 +153,10 @@ class MastermindApp(App):
     def write_line(self, text: str) -> None:
         self.query_one(Conversation).write_line(text)
 
-    def clear_transcript(self) -> None:
+    def clear_session(self) -> None:
         self.query_one(Conversation).clear()
+        if self._runtime is not None:   
+            self._runtime.clear_history()
 
     def compact_history(self) -> int | None:
         if self._runtime is None:

@@ -24,7 +24,7 @@ class CommandContext(Protocol):
     """
 
     def write_line(self, text: str) -> None: ...
-    def clear_transcript(self) -> None: ...
+    def clear_session(self) -> None: ...
     def exit(self) -> None: ...
     def open_model_dialog(self, current: ModelConfig | None) -> None: ...
     def compact_history(self) -> int | None: ...
@@ -55,8 +55,8 @@ def _help(args: list[str], ctx: CommandContext) -> CommandResult:
 
 
 def _clear(args: list[str], ctx: CommandContext) -> CommandResult:
-    ctx.clear_transcript()
-    return CommandResult(True, "Transcript cleared.")
+    ctx.clear_session()
+    return CommandResult(True, "Cleared.")
 
 
 def _model(args: list[str], ctx: CommandContext) -> CommandResult:
@@ -141,7 +141,7 @@ def demo() -> None:
         def write_line(self, text: str) -> None:
             self.lines.append(text)
 
-        def clear_transcript(self) -> None:
+        def clear_session(self) -> None:
             self.cleared = True
 
         def exit(self) -> None:

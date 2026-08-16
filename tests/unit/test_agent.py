@@ -5,6 +5,7 @@ provider/API key.
 """
 
 import pytest
+import uuid
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 
 from mastermind.agent import agent_runtime as runtime_module
@@ -27,7 +28,7 @@ async def test_agent_runtime_streams_then_completes(
         "build_chat_model",
         lambda cfg: GenericFakeChatModel(messages=iter(["hello world"])),
     )
-    agent = AgentRuntime(Config(model_config=ModelConfig(provider="ollama", model="test")))
+    agent = AgentRuntime(Config(model_config=ModelConfig(provider="ollama", model="test")), str(uuid.uuid4()))
 
     events = [event async for event in agent.astream("hi")]
 
@@ -48,7 +49,7 @@ async def test_agent_runtime_yields_error_on_failure(
             yield  # pragma: no cover -- unreachable, keeps this an async generator
 
     monkeypatch.setattr(runtime_module, "build_chat_model", lambda cfg: BrokenLLM())
-    agent = AgentRuntime(Config(model_config=ModelConfig(provider="ollama", model="test")))
+    agent = AgentRuntime(Config(model_config=ModelConfig(provider="ollama", model="test")), str(uuid.uuid4()))
 
     events = [event async for event in agent.astream("hi")]
 
