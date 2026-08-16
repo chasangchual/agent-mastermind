@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from logging import Logger
+import uuid 
 
 from langchain_core.messages import (
     AIMessage,
@@ -127,6 +128,8 @@ class AgentRuntime:
             {"configurable": thread},
             {"messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES)]},
         )
+        self._thread_id = str(uuid.uuid4())  # new thread id, so a new session in Langfuse
+
 
     def _get_state_message_for_default_thread(self) -> list[HumanMessage | AIMessage]:
         snapshot = self._get_state_snapshot_for_default_thread()
