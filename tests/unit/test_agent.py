@@ -27,7 +27,7 @@ async def test_agent_runtime_streams_then_completes(
     monkeypatch.setattr(
         runtime_module,
         "build_chat_model",
-        lambda cfg: GenericFakeChatModel(messages=iter(["hello world"])),
+        lambda cfg, tools: GenericFakeChatModel(messages=iter(["hello world"])),
     )
     agent = Agent(
         Config(model_config=ModelConfig(provider="ollama", model="test")),
@@ -51,7 +51,9 @@ async def test_agent_runtime_yields_error_on_failure(
         async def ainvoke(self, messages: object, config: object) -> object:
             raise RuntimeError("boom")
 
-    monkeypatch.setattr(runtime_module, "build_chat_model", lambda cfg: BrokenLLM())
+    monkeypatch.setattr(
+        runtime_module, "build_chat_model", lambda cfg, tools: BrokenLLM()
+    )
     agent = Agent(
         Config(model_config=ModelConfig(provider="ollama", model="test")),
         str(uuid.uuid4()),
@@ -70,7 +72,7 @@ async def test_agent_dump_history_renders_thread_messages(
     monkeypatch.setattr(
         runtime_module,
         "build_chat_model",
-        lambda cfg: GenericFakeChatModel(messages=iter(["hello world"])),
+        lambda cfg, tools: GenericFakeChatModel(messages=iter(["hello world"])),
     )
     agent = Agent(
         Config(model_config=ModelConfig(provider="ollama", model="test")),

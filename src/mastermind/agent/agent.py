@@ -33,6 +33,7 @@ from mastermind.agent.graph_builder import build_chat_agent_graph
 from mastermind.config.settings import Config
 from mastermind.llm import build_chat_model
 from mastermind.observability.tracing import get_callbacks
+from mastermind.agent.tool import tools
 
 
 class Agent:
@@ -66,9 +67,11 @@ class Agent:
     def __init__(self, config: Config, thread_id: str = _DEFAULT_THREAD_ID) -> None:
         assert config.model_config is not None
 
-        self._llm = build_chat_model(config.model_config)
+        self._llm = build_chat_model(config.model_config, tools)
         self._graph = build_chat_agent_graph(
-            self._llm, draw_mermaid=config.draw_mermaid
+            self._llm,
+            tools,
+            draw_mermaid=config.draw_mermaid,
         )
         self._thread_id = thread_id
         self._compact_max_token = config.compact_max_token

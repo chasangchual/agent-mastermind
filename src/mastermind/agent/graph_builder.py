@@ -14,25 +14,26 @@ to change — same idea CLAUDE.md's Architecture Layering describes.
 """
 
 from __future__ import annotations
+
 from typing import Annotated, TypedDict
 
 from langchain.messages import AnyMessage
-from langchain_protocol import Annotated
 from langchain_core.language_models import BaseChatModel
+from langchain_core.runnables import RunnableConfig
+from langchain_core.tools import BaseTool
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph, add_messages
 from langgraph.graph.state import CompiledStateGraph
-from langchain_core.runnables import RunnableConfig
 from langgraph.prebuilt import ToolNode, tools_condition
 
-from mastermind.agent.tool import tools
 
 class State(TypedDict):
-    messages : Annotated[list[AnyMessage], add_messages]
-    
+    messages: Annotated[list[AnyMessage], add_messages]
 
-    
-def build_chat_agent_graph(llm: BaseChatModel, *, draw_mermaid: bool = False) -> CompiledStateGraph:
+
+def build_chat_agent_graph(
+    llm: BaseChatModel, tools: list[BaseTool], *, draw_mermaid: bool = False
+) -> CompiledStateGraph:
     async def llm_call_node(state: State, config: RunnableConfig) -> dict:
         message = await llm.ainvoke(state["messages"], config)
         return {"messages": [message]}
@@ -42,8 +43,8 @@ def build_chat_agent_graph(llm: BaseChatModel, *, draw_mermaid: bool = False) ->
     builder.add_node("tools", ToolNode(tools))
     builder.add_edge(START, "llm_call")
     # tools_condition (from langgraph.prebuilt) already returns either "tools" or the END sentinel itself
-    builder.add_conditional_edges('llm_call', tools_condition)
-    builder.add_edge("tools", 'llm_call')
+    builder.add_conditional_edges("llm_call", tools_condition)
+    builder.add_edge("tools", "llm_call")
 
     _graph = builder.compile(checkpointer=InMemorySaver())
     if draw_mermaid:
