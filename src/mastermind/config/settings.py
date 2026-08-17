@@ -19,6 +19,7 @@ class ModelConfig:
     model: str
     api_key: str | None = None
     base_url: str | None = None
+    temperature: float | None = 0.1
 
 
 @dataclass(frozen=True)

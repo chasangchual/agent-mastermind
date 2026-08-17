@@ -116,6 +116,17 @@ class ModelScreen(ModalScreen[ModelConfig | None]):
                 password=True,
                 id="api_key",
             )
+            yield Label("Temperature")
+            temperature = (
+                self._current.temperature if self._current else ModelConfig.temperature
+            )
+            yield Input(
+                value="" if temperature is None else str(temperature),
+                placeholder="provider default",
+                type="number",
+                valid_empty=True,
+                id="temperature",
+            )
             with Horizontal(id="buttons"):
                 yield Button("Cancel", id="cancel")
                 yield Button("Save", variant="primary", id="save")
@@ -176,11 +187,13 @@ class ModelScreen(ModalScreen[ModelConfig | None]):
 
         base_url = self.query_one("#base_url", Input).value or None
         api_key = self.query_one("#api_key", Input).value or None
+        temperature_value = self.query_one("#temperature", Input).value
         self.dismiss(
             ModelConfig(
                 provider=provider,
                 model=model,
                 base_url=base_url if needs_base_url(provider) else None,
                 api_key=api_key if needs_api_key(provider) else None,
+                temperature=float(temperature_value) if temperature_value else None,
             )
         )

@@ -33,17 +33,20 @@ def build_chat_model(cfg: ModelConfig, tools: list[BaseTool]) -> BaseChatModel:
             model=cfg.model,
             base_url=cfg.base_url or "http://localhost:8080/v1",
             api_key=cfg.api_key or "not-needed",
+            temperature=cfg.temperature,
         )
     else:
         provider = _INIT_CHAT_MODEL_PROVIDERS.get(cfg.provider)
         if provider is None:
             raise ProviderError(f"Unsupported provider: {cfg.provider}")
 
-        kwargs: dict[str, str] = {}
+        kwargs: dict[str, str | float] = {}
         if cfg.base_url:
             kwargs["base_url"] = cfg.base_url
         if cfg.api_key:
             kwargs["api_key"] = cfg.api_key
+        if cfg.temperature is not None:
+            kwargs["temperature"] = cfg.temperature
         model = init_chat_model(cfg.model, model_provider=provider, **kwargs)
 
     # .bind_tools() is typed as returning Runnable[LanguageModelInput, AIMessage],
