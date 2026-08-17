@@ -27,13 +27,13 @@ from mastermind.agent.events import (
     AssistantStarted,
     AssistantToken,
 )
-from mastermind.agent.graph import build_graph
+from mastermind.agent.graph_builder import build_chat_agent_graph
 from mastermind.config.settings import Config
 from mastermind.llm import build_chat_model
 from mastermind.observability.tracing import get_callbacks
 
 
-class AgentRuntime:
+class Agent:
     """Runs the graph for one turn and relays it as `AgentEvent`s.
 
     `astream()` opens the graph run via `astream_events(version="v3")`, which multiplexes every event the run produces, not just chat tokens.
@@ -65,7 +65,7 @@ class AgentRuntime:
         assert config.model_config is not None
 
         self._llm = build_chat_model(config.model_config)
-        self._graph = build_graph(self._llm, draw_mermaid=config.draw_mermaid)
+        self._graph = build_chat_agent_graph(self._llm, draw_mermaid=config.draw_mermaid)
         self._thread_id = thread_id
         self._compact_max_token = config.compact_max_token
         self._max_iterations = config.max_iterations
@@ -121,6 +121,11 @@ class AgentRuntime:
                 {"messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES), *trimmed]},
             )
         return droppedCount
+
+    def dump_history(self) -> int:
+        thread = self._get_thread(self._thread_id)
+        messages = self._get_state_messages(self._thread_id)
+        return messages
 
     def clear_history(self) -> None:
         thread = self._get_thread(self._thread_id)

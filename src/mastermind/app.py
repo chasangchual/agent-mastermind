@@ -8,7 +8,7 @@ from textual import work
 from textual.app import App, ComposeResult
 from textual.widgets import Footer, Header, Input
 
-from mastermind.agent.agent_runtime import AgentRuntime
+from mastermind.agent.agent import Agent
 from mastermind.agent.events import AgentError, AssistantCompleted, AssistantToken
 from mastermind.config.settings import Config, ModelConfig, load_config, save_config
 from mastermind.observability.tracing import shutdown as shutdown_tracing
@@ -80,7 +80,7 @@ class MastermindApp(App):
         # CLAUDE.md's Architecture Layering. Built in on_mount(), not here,
         # since building it can fail and report the error via write_line(),
         # which needs the widget tree mounted first.
-        self._runtime: AgentRuntime | None = None
+        self._runtime: Agent | None = None
 
     def on_mount(self) -> None:
         # on_mount fires once compose()'s widget tree is attached — the
@@ -109,7 +109,7 @@ class MastermindApp(App):
         assert cfg.model_config is not None
         try:
             import uuid
-            self._runtime = AgentRuntime(cfg, str(uuid.uuid4()))
+            self._runtime = Agent(cfg, str(uuid.uuid4()))
         except Exception as exc:  # noqa: BLE001 -- an unsupported/misconfigured provider must be reported, not crash startup
             self._runtime = None
             # `escape()` because `exc`'s message is untrusted (e.g. a

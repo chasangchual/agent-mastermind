@@ -23,32 +23,30 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph, add_messages
 from langgraph.graph.state import CompiledStateGraph
 from langchain_core.runnables import RunnableConfig
+from langgraph.prebuilt import ToolNode, tools_condition
+
+from mastermind.agent.tool import tools
 
 class State(TypedDict):
     messages : Annotated[list[AnyMessage], add_messages]
     
+
     
-def build_graph(llm: BaseChatModel, *, draw_mermaid: bool = False) -> CompiledStateGraph:
-    async def call_model(state: State, config: RunnableConfig) -> dict:
-        # `llm.ainvoke` (not `.astream`) is deliberate under `astream_events`
-        # `version="v3"` (see agent_runtime.py): `.astream()` is a legacy
-        # `BaseChatModel` code path that only ever fires the old
-        # `on_llm_new_token` callback and never touches the v2/v3
-        # content-block machinery — v3 protocol-event deltas are only
-        # emitted from inside `_agenerate_with_cache`/`.ainvoke()`, driven
-        # by a `_V2StreamingCallbackHandler` LangGraph attaches to `config`
-        # for a v3 run. `config` must be threaded through so that handler
-        # reaches the model call.
+def build_chat_agent_graph(llm: BaseChatModel, *, draw_mermaid: bool = False) -> CompiledStateGraph:
+    async def llm_call_node(state: State, config: RunnableConfig) -> dict:
         message = await llm.ainvoke(state["messages"], config)
         return {"messages": [message]}
 
     builder = StateGraph(State)
-    builder.add_node("chat", call_model)
-    builder.add_edge(START, "chat")
-    builder.add_edge("chat", END)
-    
+    builder.add_node("llm_call", llm_call_node)
+    builder.add_node("tools", ToolNode(tools))
+    builder.add_edge(START, "llm_call")
+    # tools_condition (from langgraph.prebuilt) already returns either "tools" or the END sentinel itself
+    builder.add_conditional_edges('llm_call', tools_condition)
+    builder.add_edge("tools", 'llm_call')
+
     _graph = builder.compile(checkpointer=InMemorySaver())
-    if draw_mermaid:  # config.draw_mermaid — debug aid, off by default
-        _graph.get_graph().draw_mermaid_png(output_file_path="graph.png")
+    if draw_mermaid:
+        _graph.get_graph().draw_mermaid_png(output_file_path="model_tool_graph.png")
 
     return _graph
