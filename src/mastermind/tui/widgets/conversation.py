@@ -25,9 +25,9 @@ class Conversation(VerticalScroll):
         self.scroll_end(animate=False)
         return message
 
-    def write_line(self, text: str) -> None:
+    def write_line(self, text: str, *, markup: bool = True) -> None:
         """A plain status/command-result line — Rich markup, not Markdown."""
-        self.mount(Static(text, markup=True))
+        self.mount(Static(text, markup=markup))
         self.scroll_end(animate=False)
 
     def clear(self) -> None:

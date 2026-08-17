@@ -21,11 +21,12 @@ async def test_app_composes_and_runs() -> None:
 
 
 # write_line() renders through a `Static(markup=True)` (see
-# tui/widgets/conversation.py), which parses "[...]" as Rich markup tags —
-# any of these three call sites embedding *untrusted* text (an exception
-# message, a user-typed model name, raw user input echoed back) into a
-# markup-tagged string will raise `MarkupError` and crash the app if that
-# text happens to contain unescaped brackets, e.g. a Pydantic error's
+# tui/widgets/conversation.py), which parses "[...]" via Textual's own
+# content-markup tokenizer (textual/markup.py) — any of these call sites
+# embedding *untrusted* text (an exception message, a user-typed model name,
+# raw user input echoed back, a dumped message repr) into markup will raise
+# `MarkupError` and crash the app if that text happens to contain brackets
+# escape() doesn't neutralize, e.g. a Pydantic error's
 # "[type=string_type, input_type=dict]". None of these should raise.
 @pytest.mark.asyncio
 async def test_bracketed_dynamic_text_does_not_crash_markup_rendering() -> None:
@@ -43,3 +44,28 @@ async def test_bracketed_dynamic_text_does_not_crash_markup_rendering() -> None:
         app._on_model_configured(
             ModelConfig(provider="ollama", model="weird[model]", base_url="http://x")
         )
+
+        # /dump's output embeds raw model-generated text, which can contain a
+        # stray "[" (e.g. a truncated citation like "[1 for more info", no
+        # closing "]"). escape() only escapes brackets matching a tag-like
+        # "[a-z#/@...]" pattern, so an unmatched "[" like this slips through
+        # unescaped; Textual's tokenizer then treats it as an open tag and
+        # keeps scanning for a close, and an `identifier=` fragment further
+        # in the same string can look like a `key=value` tag parameter to
+        # it, raising MarkupError. Verified to reproduce with
+        # escape()+markup=True; CommandResult.markup=False for /dump
+        # (commands.py::_dump) skips markup parsing entirely instead, which
+        # is the only reliable fix for arbitrary text regardless of how
+        # dump_history() formats it (see agent.py::Agent._format_message).
+        class _StubRuntime:
+            def dump_history(self) -> str:
+                return (
+                    'AIMessage(content="Here\'s a reference [1 for more info", '
+                    "additional_kwargs={}, "
+                    "response_metadata={'model_name': 'models/gemini-3.6-flash'}, "
+                    "id='lc_run--01a00dd6-0fdf-7e42-bc47-4a6f984115b7', "
+                    "tool_calls=[], invalid_tool_calls=[])"
+                )
+
+        app._runtime = _StubRuntime()  # type: ignore[assignment]
+        await pilot.press(*"/dump", "enter")

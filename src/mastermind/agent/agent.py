@@ -7,19 +7,21 @@ LangGraph chunk/event object or a LangChain message type.
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import AsyncIterator
-from logging import Logger
-import uuid 
+from typing import Any
 
 from langchain_core.messages import (
     AIMessage,
+    BaseMessage,
     HumanMessage,
     RemoveMessage,
+    ToolMessage,
     trim_messages,
 )
-from langchain_protocol import Any
-from langgraph.types import StateSnapshot
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
+from langgraph.types import StateSnapshot
+
 from mastermind.agent.events import (
     AgentError,
     AgentEvent,
@@ -65,7 +67,9 @@ class Agent:
         assert config.model_config is not None
 
         self._llm = build_chat_model(config.model_config)
-        self._graph = build_chat_agent_graph(self._llm, draw_mermaid=config.draw_mermaid)
+        self._graph = build_chat_agent_graph(
+            self._llm, draw_mermaid=config.draw_mermaid
+        )
         self._thread_id = thread_id
         self._compact_max_token = config.compact_max_token
         self._max_iterations = config.max_iterations
@@ -96,9 +100,7 @@ class Agent:
                     async for text in stream.text:
                         buffer += text
                         yield AssistantToken(text)
-        except (
-            Exception
-        ) as ex:  # noqa: BLE001 -- any provider/network error must surface to the TUI, not crash it
+        except Exception as ex:  # noqa: BLE001 -- any provider/network error must surface to the TUI, not crash it
             yield AgentError(repr(ex))
             return
 
@@ -122,10 +124,29 @@ class Agent:
             )
         return droppedCount
 
-    def dump_history(self) -> int:
-        thread = self._get_thread(self._thread_id)
+    def dump_history(self) -> str:
+        """Render the running thread's checkpointed messages for /dump."""
         messages = self._get_state_messages(self._thread_id)
-        return messages
+        if not messages:
+            return "(no messages yet)"
+        return "\n\n".join(self._format_message(message) for message in messages)
+
+    @staticmethod
+    def _format_message(message: BaseMessage) -> str:
+        # `.text` extracts plain text regardless of content shape (a string,
+        # or Gemini/Anthropic-style content blocks) — skips content-block
+        # noise like a thought-signature blob that repr(message) would dump
+        # verbatim. Tool calls/responses are rendered separately since a
+        # tool-call-only AIMessage has no text.
+        header = f"[{message.type}]"
+        if isinstance(message, ToolMessage):
+            header += f" ({message.name})"
+        lines = [header]
+        if message.text:
+            lines.append(message.text)
+        for call in getattr(message, "tool_calls", None) or []:
+            lines.append(f"  -> {call['name']}({call['args']})")
+        return "\n".join(lines)
 
     def clear_history(self) -> None:
         thread = self._get_thread(self._thread_id)
@@ -133,8 +154,9 @@ class Agent:
             {"configurable": thread},
             {"messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES)]},
         )
-        self._thread_id = str(uuid.uuid4())  # new thread id, so a new session in Langfuse
-
+        self._thread_id = str(
+            uuid.uuid4()
+        )  # new thread id, so a new session in Langfuse
 
     def _get_state_message_for_default_thread(self) -> list[HumanMessage | AIMessage]:
         snapshot = self._get_state_snapshot_for_default_thread()

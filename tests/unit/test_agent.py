@@ -4,18 +4,19 @@ model, verifying the AgentEvent contract (AssistantStarted -> AssistantToken*
 provider/API key.
 """
 
-import pytest
 import uuid
+
+import pytest
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 
 from mastermind.agent import agent as runtime_module
+from mastermind.agent.agent import Agent
 from mastermind.agent.events import (
     AgentError,
     AssistantCompleted,
     AssistantStarted,
     AssistantToken,
 )
-from mastermind.agent.agent import Agent
 from mastermind.config.settings import Config, ModelConfig
 
 
@@ -28,7 +29,10 @@ async def test_agent_runtime_streams_then_completes(
         "build_chat_model",
         lambda cfg: GenericFakeChatModel(messages=iter(["hello world"])),
     )
-    agent = Agent(Config(model_config=ModelConfig(provider="ollama", model="test")), str(uuid.uuid4()))
+    agent = Agent(
+        Config(model_config=ModelConfig(provider="ollama", model="test")),
+        str(uuid.uuid4()),
+    )
 
     events = [event async for event in agent.astream("hi")]
 
@@ -44,14 +48,39 @@ async def test_agent_runtime_yields_error_on_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class BrokenLLM:
-        async def astream(self, messages: object) -> object:
+        async def ainvoke(self, messages: object, config: object) -> object:
             raise RuntimeError("boom")
-            yield  # pragma: no cover -- unreachable, keeps this an async generator
 
     monkeypatch.setattr(runtime_module, "build_chat_model", lambda cfg: BrokenLLM())
-    agent = Agent(Config(model_config=ModelConfig(provider="ollama", model="test")), str(uuid.uuid4()))
+    agent = Agent(
+        Config(model_config=ModelConfig(provider="ollama", model="test")),
+        str(uuid.uuid4()),
+    )
 
     events = [event async for event in agent.astream("hi")]
 
     assert isinstance(events[-1], AgentError)
     assert "boom" in events[-1].error
+
+
+@pytest.mark.asyncio
+async def test_agent_dump_history_renders_thread_messages(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        runtime_module,
+        "build_chat_model",
+        lambda cfg: GenericFakeChatModel(messages=iter(["hello world"])),
+    )
+    agent = Agent(
+        Config(model_config=ModelConfig(provider="ollama", model="test")),
+        str(uuid.uuid4()),
+    )
+
+    assert agent.dump_history() == "(no messages yet)"
+
+    [_ async for _ in agent.astream("hi")]
+
+    dump = agent.dump_history()
+    assert "[human]\nhi" in dump
+    assert "[ai]\nhello world" in dump

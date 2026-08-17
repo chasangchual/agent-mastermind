@@ -109,6 +109,7 @@ class MastermindApp(App):
         assert cfg.model_config is not None
         try:
             import uuid
+
             self._runtime = Agent(cfg, str(uuid.uuid4()))
         except Exception as exc:  # noqa: BLE001 -- an unsupported/misconfigured provider must be reported, not crash startup
             self._runtime = None
@@ -144,24 +145,31 @@ class MastermindApp(App):
         self._build_runtime(self._config)
         # `newModelCfg.model` can be user-typed (the /model dialog's "Custom model
         # name" field), so it gets the same escape() treatment as above.
-        self.write_line(f"[b]Model configured:[/b] {newModelCfg.provider}/{escape(newModelCfg.model)}")
+        self.write_line(
+            f"[b]Model configured:[/b] {newModelCfg.provider}/{escape(newModelCfg.model)}"
+        )
 
     # --- CommandContext protocol (see commands.py): handlers take this
     # narrow interface instead of the whole App so they're unit-testable
     # without booting Textual. Nothing declares the relationship explicitly —
     # Protocols are structural, pyright just checks the method shapes match. ---
-    def write_line(self, text: str) -> None:
-        self.query_one(Conversation).write_line(text)
+    def write_line(self, text: str, *, markup: bool = True) -> None:
+        self.query_one(Conversation).write_line(text, markup=markup)
 
     def clear_session(self) -> None:
         self.query_one(Conversation).clear()
-        if self._runtime is not None:   
+        if self._runtime is not None:
             self._runtime.clear_history()
 
     def compact_history(self) -> int | None:
         if self._runtime is None:
             return None
         return self._runtime.compact_history()
+
+    def dump_history(self) -> str | None:
+        if self._runtime is None:
+            return None
+        return self._runtime.dump_history()
 
     def exit(self, *args: Any, **kwargs: Any) -> None:
         # Named `exit` to match CommandContext's method name, not Textual's
@@ -187,8 +195,11 @@ class MastermindApp(App):
             # going to (e.g. /exit tearing down the app) — most visibly,
             # writing a status line into a screen mid-shutdown would raise.
             if result.message:
-                style = "b" if result.ok else "b red"
-                self.write_line(f"[{style}]{escape(result.message)}[/{style}]")
+                if result.markup:
+                    style = "b" if result.ok else "b red"
+                    self.write_line(f"[{style}]{escape(result.message)}[/{style}]")
+                else:
+                    self.write_line(result.message, markup=False)
             return
 
         self.query_one(Conversation).add_message("user", text)

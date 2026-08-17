@@ -23,11 +23,12 @@ class CommandContext(Protocol):
     plain `_FakeContext` with no Textual involved at all.
     """
 
-    def write_line(self, text: str) -> None: ...
+    def write_line(self, text: str, *, markup: bool = True) -> None: ...
     def clear_session(self) -> None: ...
     def exit(self) -> None: ...
     def open_model_dialog(self, current: ModelConfig | None) -> None: ...
     def compact_history(self) -> int | None: ...
+    def dump_history(self) -> str | None: ...
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,10 @@ class CommandResult:
 
     ok: bool
     message: str
+    # False for /dump: a message repr can contain bracket combinations that
+    # escape() (a regex over single tag-like "[...]" spans) doesn't fully
+    # neutralize, so this is rendered as plain text instead of Rich markup.
+    markup: bool = True
 
 
 # A type alias, not a runtime object: this just gives a name to "a function
@@ -73,6 +78,13 @@ def _compact(args: list[str], ctx: CommandContext) -> CommandResult:
     return CommandResult(True, f"Compacted: {droppedCount} messages.")
 
 
+def _dump(args: list[str], ctx: CommandContext) -> CommandResult:
+    history = ctx.dump_history()
+    if history is None:
+        return CommandResult(False, "No model configured. Run /model first.")
+    return CommandResult(True, history, markup=False)
+
+
 def _exit(args: list[str], ctx: CommandContext) -> CommandResult:
     # No message: ctx.exit() tears down the app immediately, and (per
     # app.py's on_input_submitted) writing to the transcript after exit()
@@ -100,6 +112,7 @@ COMMANDS: dict[str, CommandHandler] = {
     "new": _not_implemented,
     "model": _model,
     "compact": _compact,
+    "dump": _dump,
     "provider": _not_implemented,
     "tools": _not_implemented,
     "skills": _not_implemented,
@@ -136,7 +149,8 @@ def demo() -> None:
             self.cleared = False
             self.exit_called = False
             self.model_dialog_opened = False
-            self.compact_droppedCount = 3 
+            self.compact_droppedCount = 3
+            self.history = "[human] hi"
 
         def write_line(self, text: str) -> None:
             self.lines.append(text)
@@ -153,6 +167,9 @@ def demo() -> None:
         def compact_history(self) -> int | None:
             return self.compact_droppedCount
 
+        def dump_history(self) -> str | None:
+            return self.history
+
     ctx = _FakeContext()
     help_result = run_command("/help", ctx)
     assert (
@@ -160,11 +177,12 @@ def demo() -> None:
         and "/model" in help_result.message
         and "/clear" in help_result.message
     )
-    assert run_command("/clear", ctx) == CommandResult(True, "Transcript cleared.")
+    assert run_command("/clear", ctx) == CommandResult(True, "Cleared.")
     assert ctx.cleared is True
     assert run_command("/nope", ctx) == CommandResult(False, "Unknown command: /nope")
     assert run_command("/model gpt-4", ctx).ok is True
     assert ctx.model_dialog_opened is True
+    assert run_command("/dump", ctx) == CommandResult(True, "[human] hi", markup=False)
     assert run_command("/exit", ctx) == CommandResult(True, "")
     assert ctx.exit_called is True
     print("commands.py demo OK")
