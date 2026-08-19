@@ -7,6 +7,7 @@ provider/API key.
 import uuid
 
 import pytest
+from langchain_core.embeddings import DeterministicFakeEmbedding
 from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 
 from mastermind.agent import agent as runtime_module
@@ -17,7 +18,19 @@ from mastermind.agent.events import (
     AssistantStarted,
     AssistantToken,
 )
-from mastermind.config.settings import Config, ModelConfig
+from mastermind.config.settings import Config, EmbeddingConfig, ModelConfig
+
+_FAKE_EMBEDDING_CONFIG = EmbeddingConfig(provider="ollama", model="test")
+
+
+class ToolBindableFakeChatModel(GenericFakeChatModel):
+    """GenericFakeChatModel has no real tool-calling model behind it, so its
+    inherited bind_tools() raises NotImplementedError - the graph always
+    calls bind_tools() on the selected subset, so tests need a no-op here.
+    """
+
+    def bind_tools(self, tools: object, **kwargs: object) -> "ToolBindableFakeChatModel":
+        return self
 
 
 @pytest.mark.asyncio
@@ -27,10 +40,18 @@ async def test_agent_runtime_streams_then_completes(
     monkeypatch.setattr(
         runtime_module,
         "build_chat_model",
-        lambda cfg, tools: GenericFakeChatModel(messages=iter(["hello world"])),
+        lambda cfg: ToolBindableFakeChatModel(messages=iter(["hello world"])),
+    )
+    monkeypatch.setattr(
+        runtime_module,
+        "build_embedding",
+        lambda cfg: DeterministicFakeEmbedding(size=8),
     )
     agent = Agent(
-        Config(model_config=ModelConfig(provider="ollama", model="test")),
+        Config(
+            model_config=ModelConfig(provider="ollama", model="test"),
+            embedding_config=_FAKE_EMBEDDING_CONFIG,
+        ),
         str(uuid.uuid4()),
     )
 
@@ -48,14 +69,23 @@ async def test_agent_runtime_yields_error_on_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class BrokenLLM:
+        def bind_tools(self, tools: object, **kwargs: object) -> "BrokenLLM":
+            return self
+
         async def ainvoke(self, messages: object, config: object) -> object:
             raise RuntimeError("boom")
 
+    monkeypatch.setattr(runtime_module, "build_chat_model", lambda cfg: BrokenLLM())
     monkeypatch.setattr(
-        runtime_module, "build_chat_model", lambda cfg, tools: BrokenLLM()
+        runtime_module,
+        "build_embedding",
+        lambda cfg: DeterministicFakeEmbedding(size=8),
     )
     agent = Agent(
-        Config(model_config=ModelConfig(provider="ollama", model="test")),
+        Config(
+            model_config=ModelConfig(provider="ollama", model="test"),
+            embedding_config=_FAKE_EMBEDDING_CONFIG,
+        ),
         str(uuid.uuid4()),
     )
 
@@ -72,10 +102,18 @@ async def test_agent_dump_history_renders_thread_messages(
     monkeypatch.setattr(
         runtime_module,
         "build_chat_model",
-        lambda cfg, tools: GenericFakeChatModel(messages=iter(["hello world"])),
+        lambda cfg: ToolBindableFakeChatModel(messages=iter(["hello world"])),
+    )
+    monkeypatch.setattr(
+        runtime_module,
+        "build_embedding",
+        lambda cfg: DeterministicFakeEmbedding(size=8),
     )
     agent = Agent(
-        Config(model_config=ModelConfig(provider="ollama", model="test")),
+        Config(
+            model_config=ModelConfig(provider="ollama", model="test"),
+            embedding_config=_FAKE_EMBEDDING_CONFIG,
+        ),
         str(uuid.uuid4()),
     )
 

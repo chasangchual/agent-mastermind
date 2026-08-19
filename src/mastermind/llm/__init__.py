@@ -8,12 +8,9 @@ chat-completions API, so ChatOpenAI pointed at it works directly.
 
 from __future__ import annotations
 
-from typing import cast
-
 from langchain.chat_models import init_chat_model
 from langchain.embeddings import Embeddings, init_embeddings
 from langchain_core.language_models import BaseChatModel
-from langchain_core.tools import BaseTool
 
 from mastermind.config.settings import EmbeddingConfig, ModelConfig
 from mastermind.exceptions import ProviderError
@@ -25,36 +22,29 @@ _INIT_CHAT_MODEL_PROVIDERS = {
     "ollama": "ollama",
 }
 
-
-def build_chat_model(cfg: ModelConfig, tools: list[BaseTool]) -> BaseChatModel:
+def build_chat_model(cfg: ModelConfig) -> BaseChatModel:
     if cfg.provider == "llama.cpp":
         from langchain_openai import ChatOpenAI
 
-        model: BaseChatModel = ChatOpenAI(
+        return ChatOpenAI(
             model=cfg.model,
             base_url=cfg.base_url or "http://localhost:8080/v1",
             api_key=cfg.api_key or "not-needed",
             temperature=cfg.temperature,
         )
-    else:
-        provider = _INIT_CHAT_MODEL_PROVIDERS.get(cfg.provider)
-        if provider is None:
-            raise ProviderError(f"Unsupported provider: {cfg.provider}")
 
-        kwargs: dict[str, str | float] = {}
-        if cfg.base_url:
-            kwargs["base_url"] = cfg.base_url
-        if cfg.api_key:
-            kwargs["api_key"] = cfg.api_key
-        if cfg.temperature is not None:
-            kwargs["temperature"] = cfg.temperature
-        model = init_chat_model(cfg.model, model_provider=provider, **kwargs)
+    provider = _INIT_CHAT_MODEL_PROVIDERS.get(cfg.provider)
+    if provider is None:
+        raise ProviderError(f"Unsupported provider: {cfg.provider}")
 
-    # .bind_tools() is typed as returning Runnable[LanguageModelInput, AIMessage],
-    # but the actual object is a proxy binding that forwards every call (ainvoke,
-    # get_num_tokens_from_messages, ...) to the wrapped chat model, so it's safe
-    # to treat as one here rather than loosening BaseChatModel everywhere it flows.
-    return cast(BaseChatModel, model.bind_tools(tools))
+    kwargs: dict[str, str | float] = {}
+    if cfg.base_url:
+        kwargs["base_url"] = cfg.base_url
+    if cfg.api_key:
+        kwargs["api_key"] = cfg.api_key
+    if cfg.temperature is not None:
+        kwargs["temperature"] = cfg.temperature
+    return init_chat_model(cfg.model, model_provider=provider, **kwargs)
 
 
 def build_embedding(cfg: EmbeddingConfig) -> Embeddings:

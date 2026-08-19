@@ -30,10 +30,10 @@ from mastermind.agent.events import (
     AssistantToken,
 )
 from mastermind.agent.graph_builder import build_chat_agent_graph
-from mastermind.config.settings import Config
-from mastermind.llm import build_chat_model
-from mastermind.observability.tracing import get_callbacks
 from mastermind.agent.tool import tools
+from mastermind.config.settings import Config
+from mastermind.llm import build_chat_model, build_embedding
+from mastermind.observability.tracing import get_callbacks
 
 
 class Agent:
@@ -66,10 +66,13 @@ class Agent:
 
     def __init__(self, config: Config, thread_id: str = _DEFAULT_THREAD_ID) -> None:
         assert config.model_config is not None
+        assert config.embedding_config is not None
 
-        self._llm = build_chat_model(config.model_config, tools)
+        self._llm = build_chat_model(config.model_config)
+        self._embedding = build_embedding(config.embedding_config)
         self._graph = build_chat_agent_graph(
             self._llm,
+            self._embedding,
             tools,
             draw_mermaid=config.draw_mermaid,
         )
