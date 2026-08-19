@@ -21,7 +21,13 @@ dependencies = [
 mastermind = "mastermind.cli:main"
 
 [dependency-groups]
-dev = ["pytest>=8", "pytest-asyncio>=0.24", "ruff>=0.6", "pyright>=1.1"]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.6",
+    "pyright>=1.1",
+    "textual-dev>=1.8.0",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
