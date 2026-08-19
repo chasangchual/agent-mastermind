@@ -23,8 +23,16 @@ class ModelConfig:
 
 
 @dataclass(frozen=True)
+class EmbeddingConfig:
+    provider: str
+    model: str
+    api_key: str | None = None
+    base_url: str | None = None
+
+@dataclass(frozen=True)
 class Config:
     model_config: ModelConfig | None = None
+    embedding_config: EmbeddingConfig | None = None
     draw_mermaid: bool = False
     prompt_log: bool = False
     max_iterations: int | None = None  # None = no limit, else max iterations per turn
@@ -79,8 +87,10 @@ def load_config() -> Config:
         return Config(model_config=ModelConfig(**data))
 
     model_config = data["model_config"]
+    embedding_config = data.get("embedding_config", model_config)
     return Config(
         model_config=ModelConfig(**model_config) if model_config else None,
+        embedding_config=EmbeddingConfig(**embedding_config) if embedding_config else None,
         draw_mermaid=data.get("draw_mermaid", False),
         prompt_log=data.get("prompt_log", False),
     )
