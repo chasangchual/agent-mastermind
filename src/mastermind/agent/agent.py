@@ -155,11 +155,9 @@ class Agent:
         return "\n".join(lines)
 
     def clear_history(self) -> None:
-        thread = self._get_thread(self._thread_id)
-        self._graph.update_state(
-            {"configurable": thread},
-            {"messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES)]},
-        )
+        # A fresh thread_id points the checkpointer at a brand-new, empty
+        # checkpoint - the old thread's history is simply abandoned, so
+        # there's nothing to explicitly wipe.
         self._thread_id = str(
             uuid.uuid4()
         )  # new thread id, so a new session in Langfuse
