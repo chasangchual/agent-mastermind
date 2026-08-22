@@ -164,7 +164,7 @@ class MastermindApp(App):
     def compact_history(self) -> int | None:
         if self._runtime is None:
             return None
-        return self._runtime.compact_history()
+        return self._runtime.compact_chat_agent_history()
 
     def dump_history(self) -> str | None:
         if self._runtime is None:

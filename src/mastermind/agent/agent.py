@@ -29,7 +29,7 @@ from mastermind.agent.events import (
     AssistantStarted,
     AssistantToken,
 )
-from mastermind.agent.graph_builder import build_chat_agent_graph
+from mastermind.agent.graph_builder import build_chat_agent_graph, build_essay_writer_agent_graph
 from mastermind.agent.tool import tools
 from mastermind.config.settings import Config
 from mastermind.llm import build_chat_model, build_embedding
@@ -70,7 +70,13 @@ class Agent:
 
         self._llm = build_chat_model(config.model_config)
         self._embedding = build_embedding(config.embedding_config)
-        self._graph = build_chat_agent_graph(
+        self._chat_graph = build_chat_agent_graph(
+            self._llm,
+            self._embedding,
+            tools,
+            draw_mermaid=config.draw_mermaid,
+        )
+        self._essay_writer_graph = build_essay_writer_agent_graph(
             self._llm,
             self._embedding,
             tools,
@@ -85,7 +91,7 @@ class Agent:
         yield AssistantStarted()
         buffer = ""
         try:
-            async with await self._graph.astream_events(
+            async with await self._essay_writer_graph.astream_events(
                 {"messages": [HumanMessage(content=user_text)]},
                 config={
                     "configurable": self._get_thread(self._thread_id),
@@ -112,7 +118,7 @@ class Agent:
 
         yield AssistantCompleted(buffer)
 
-    def compact_history(self) -> int:
+    def compact_chat_agent_history(self) -> int:
         thread = self._get_thread(self._thread_id)
         messages = self._get_state_messages(self._thread_id)
         trimmed = trim_messages(
@@ -124,7 +130,25 @@ class Agent:
         )
         droppedCount = len(messages) - len(trimmed)
         if droppedCount > 0:
-            self._graph.update_state(
+            self._chat_graph.update_state(
+                {"configurable": thread},
+                {"messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES), *trimmed]},
+            )
+        return droppedCount
+
+    def compact_essay_agent_history(self) -> int:
+        thread = self._get_thread(self._thread_id)
+        messages = self._get_state_messages(self._thread_id)
+        trimmed = trim_messages(
+            messages,
+            max_tokens=self._compact_max_token,
+            token_counter=self._llm,
+            strategy="last",
+            start_on="human",
+        )
+        droppedCount = len(messages) - len(trimmed)
+        if droppedCount > 0:
+            self._chat_graph.update_state(
                 {"configurable": thread},
                 {"messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES), *trimmed]},
             )
@@ -174,7 +198,7 @@ class Agent:
         return self._get_state_snapshot(self._DEFAULT_THREAD_ID)
 
     def _get_state_snapshot(self, thread_id: str) -> StateSnapshot:
-        return self._graph.get_state({"configurable": self._get_thread(thread_id)})
+        return self._chat_graph.get_state({"configurable": self._get_thread(thread_id)})
 
     def _get_default_thread(self) -> Any:
         return self._get_thread(self._DEFAULT_THREAD_ID)
